@@ -14,17 +14,20 @@ wss.on('connection', (ws) => {
     ws.on('message', (message) => {
         console.log(`📩 Received: ${message}`);
 
+        // Log ESP32 Connection
+        if (message === "ESP32_CONNECTED") {
+            console.log("✅ ESP32 Successfully Connected!");
+        }
+
         if (message === "START_SCANNING") {
             console.log("📡 Sending SCANNING_ACTIVE to ESP32...");
-            
-            // Broadcast "SCANNING_ACTIVE" to ALL connected clients (ESP32 included)
             wss.clients.forEach(client => {
                 if (client.readyState === WebSocket.OPEN) {
                     client.send("SCANNING_ACTIVE");
                 }
             });
         } else {
-            // Broadcast RFID data to all clients
+            console.log("📡 Forwarding message to all clients...");
             wss.clients.forEach(client => {
                 if (client.readyState === WebSocket.OPEN) {
                     client.send(message);
@@ -36,4 +39,4 @@ wss.on('connection', (ws) => {
     ws.on('close', () => console.log('❌ Client Disconnected'));
 });
 
-server.listen(8080, () => console.log(`🚀 Server running on http://localhost:8080`));
+server.listen(8080, () => console.log(`🚀 Server running on http://192.168.0.103:8080`));

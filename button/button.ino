@@ -32,18 +32,25 @@ void webSocketEvent(WStype_t type, uint8_t *payload, size_t length) {
     switch (type) {
         case WStype_CONNECTED:
             Serial.println("🔗 WebSocket Connected!");
+            webSocket.sendTXT("ESP32_CONNECTED"); // Send confirmation
             break;
+
         case WStype_TEXT:
             Serial.printf("📩 Received: %s\n", payload);
-            if (String((char *)payload) == "start_scan") {
+            String message = String((char *)payload);
+
+            if (message == "SCANNING_ACTIVE") {  // Match with server.js
+                Serial.println("✅ RFID Scanning Activated!");
                 startRFIDScan();
             }
             break;
+
         case WStype_DISCONNECTED:
             Serial.println("⚠️ WebSocket Disconnected!");
             break;
     }
 }
+
 
 void startRFIDScan() {
     scanning = true;
