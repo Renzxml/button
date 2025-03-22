@@ -1,4 +1,4 @@
-const ws = new WebSocket('ws://localhost:1800');
+const ws = new WebSocket('ws://localhost:8080');
 let isScanning = false;
 
 document.getElementById('scanBtn').addEventListener('click', () => {

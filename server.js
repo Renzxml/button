@@ -28,4 +28,4 @@ wss.on('connection', (ws) => {
     ws.on('close', () => console.log('❌ Client Disconnected'));
 });
 
-server.listen(8080, () => console.log(`🚀 Server running on http://localhost:1800`));
+server.listen(8080, () => console.log(`🚀 Server running on http://localhost:8080`));
