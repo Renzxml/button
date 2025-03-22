@@ -1,18 +1,14 @@
-const ws = new WebSocket("ws://localhost:8080");
+const ws = new WebSocket('ws://localhost:8080');
 
-ws.onopen = () => console.log("Connected to WebSocket Server");
-
+// Handle WebSocket Messages
 ws.onmessage = (event) => {
-    const data = JSON.parse(event.data);
-    console.log("Received:", data);
-
-    if (data.type === "REGISTERED") {
-        document.getElementById("status").innerHTML = "RFID Registered: " + data.uid;
-    } else if (data.type === "ALREADY_REGISTERED") {
-        document.getElementById("status").innerHTML = "Already Registered: " + data.uid;
-    }
+    console.log("📩 Received:", event.data);
+    document.getElementById('rfidData').innerText = `Scanned RFID: ${event.data}`;
 };
 
-document.getElementById("scanButton").addEventListener("click", () => {
-    ws.send(JSON.stringify({ type: "SCAN_REG" }));
+// Send RFID Scan Event
+document.getElementById('scanBtn').addEventListener('click', () => {
+    const fakeRFID = "123456789ABC"; // Replace with actual scanned RFID
+    console.log("📤 Sending:", fakeRFID);
+    ws.send(fakeRFID);
 });
