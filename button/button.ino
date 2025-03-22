@@ -111,6 +111,24 @@ void setup() {
 void loop() {
     webSocket.loop();
 
+    // Check if WebSocket is disconnected and attempt to reconnect
+    static unsigned long lastReconnectAttempt = 0;
+    if (!webSocket.isConnected()) {
+        if (millis() - lastReconnectAttempt > 5000) { // Try every 5 seconds
+            lastReconnectAttempt = millis();
+            Serial.println("⚠️ WebSocket Disconnected! Reconnecting...");
+            
+            lcd.clear();
+            lcd.setCursor(0, 0);
+            lcd.print("WS Disconnected!");
+            lcd.setCursor(0, 1);
+            lcd.print("Reconnecting...");
+
+            webSocket.begin("192.168.0.103", 8080, "/");
+        }
+    }
+
+    // RFID Scanning Logic
     if (scanning) {
         if (millis() - scanStartTime > scanDuration) {
             scanning = false;
