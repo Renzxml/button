@@ -1,61 +1,55 @@
-const ws = new WebSocket('ws://192.168.0.103:8080');
-let isScanning = false;
+const socket = new WebSocket('ws://localhost:8080');
 
-document.getElementById('scanBtn').addEventListener('click', () => {
-    if (!isScanning) {
-        console.log("🔄 Activating RFID Scanner...");
-        ws.send("START_SCANNING"); // Notify ESP32
-        isScanning = true;
-    }
+const scanBtn = document.getElementById('scanBtn');
+const rfidData = document.getElementById('rfidData');
+const userSelect = document.getElementById('userSelect');
+const userDropdown = document.getElementById('userDropdown');
+const assignBtn = document.getElementById('assignBtn');
+
+let scannedTag = '';
+
+// Fetch Users
+async function loadUsers() {
+    const response = await fetch('/get-users');
+    const users = await response.json();
+
+    userDropdown.innerHTML = users.map(user => 
+        `<option value="${user.user_id}">${user.first_name} ${user.last_name}</option>`
+    ).join('');
+}
+
+// Start RFID Scanning
+scanBtn.addEventListener('click', () => {
+    socket.send('START_SCANNING');
 });
 
-ws.onmessage = async (event) => {
-    console.log("📩 Received:", event.data);
+// Receive Data from WebSocket
+socket.onmessage = (event) => {
+    const data = JSON.parse(event.data);
 
-    if (event.data === "SCANNING_ACTIVE") {
-        document.getElementById('rfidData').innerText = "Scanning RFID...";
-        return;
-    }
-
-    let scannedRFID = event.data;
-    document.getElementById('rfidData').innerText = `Scanned RFID: ${scannedRFID}`;
-    
-    // Check if RFID is registered
-    let response = await fetch('validate_rfid.php?rfid=' + scannedRFID);
-    let result = await response.json();
-
-    if (result.exists) {
-        document.getElementById('rfidData').innerText += " ✅ Registered User: " + result.user;
-    } else {
-        document.getElementById('rfidData').innerText += " ❌ Not Registered!";
-        showUserSelection(scannedRFID);
+    if (data.type === 'RFID_TAG') {
+        scannedTag = data.tag;
+        rfidData.innerText = `Scanned RFID: ${scannedTag}`;
+        userSelect.classList.remove('hidden');
+        loadUsers();
     }
 };
 
-function showUserSelection(rfid) {
-    document.getElementById('userSelect').classList.remove('hidden');
+// Assign RFID to User
+assignBtn.addEventListener('click', async () => {
+    const selectedUserId = userDropdown.value;
 
-    // Fetch user list
-    fetch('get_users.php')
-        .then(res => res.json())
-        .then(users => {
-            let dropdown = document.getElementById('userDropdown');
-            dropdown.innerHTML = users.map(user => `<option value="${user.user_id}">${user.first_name} ${user.last_name}</option>`).join('');
-        });
+    if (!scannedTag || !selectedUserId) {
+        alert('Please select a user and scan an RFID.');
+        return;
+    }
 
-    // Assign RFID to User
-    document.getElementById('assignBtn').addEventListener('click', () => {
-        let selectedUser = document.getElementById('userDropdown').value;
-        if (!selectedUser) return alert("Please select a user!");
-
-        fetch('assign_rfid.php', {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ rfid, user_id: selectedUser })
-        }).then(res => res.json())
-        .then(data => {
-            alert(data.message);
-            document.getElementById('userSelect').classList.add('hidden');
-        });
+    const response = await fetch('/save-rfid', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rfidTag: scannedTag, userId: selectedUserId })
     });
-}
+
+    const result = await response.json();
+    alert(result.message);
+});
