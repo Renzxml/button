@@ -2,7 +2,7 @@
 $host = "localhost";
 $user = "root";
 $password = "";
-$database = "locker_system";
+$database = "lockerv1_db";
 
 $conn = new mysqli($host, $user, $password, $database);
 

@@ -1,40 +1,45 @@
 <?php
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $data = json_decode(file_get_contents('php://input'), true);
+header('Content-Type: application/json');
 
-    $rfidTag = $data['rfidTag'];
-    $userId = $data['userId'];
+$data = json_decode(file_get_contents('php://input'), true);
 
-    // Database Connection
-    $conn = new mysqli('localhost', 'root', '', 'lockerv1_db');
-
-    if ($conn->connect_error) {
-        echo json_encode(['message' => '❗ Database connection failed.']);
-        exit();
-    }
-
-    // Check if RFID already exists
-    $checkRFID = $conn->prepare("SELECT * FROM rfid_tbl WHERE rfid_tag = ?");
-    $checkRFID->bind_param('s', $rfidTag);
-    $checkRFID->execute();
-    $result = $checkRFID->get_result();
-
-    if ($result->num_rows > 0) {
-        echo json_encode(['message' => '❗ RFID already registered.']);
-        exit();
-    }
-
-    // Insert RFID
-    $stmt = $conn->prepare("INSERT INTO rfid_tbl (rfid_tag, rfid_status, current_start, user_id) VALUES (?, 'active', NOW(), ?)");
-    $stmt->bind_param('si', $rfidTag, $userId);
-
-    if ($stmt->execute()) {
-        echo json_encode(['message' => '✅ RFID successfully registered!']);
-    } else {
-        echo json_encode(['message' => '❌ Failed to save RFID.']);
-    }
-
-    $stmt->close();
-    $conn->close();
+if (!$data || !isset($data['rfidTag']) || !isset($data['userId'])) {
+    echo json_encode(['success' => false, 'message' => '❗ Invalid data received.']);
+    exit;
 }
+
+$rfidTag = $data['rfidTag'];
+$userId = $data['userId'];
+
+// Database connection
+$conn = new mysqli('localhost', 'root', '', 'lockerv1_db');
+
+if ($conn->connect_error) {
+    echo json_encode(['success' => false, 'message' => '❗ Database connection failed.']);
+    exit;
+}
+
+// Check if RFID already exists
+$checkStmt = $conn->prepare("SELECT * FROM registered_rfid WHERE rfid_tag = ?");
+$checkStmt->bind_param("s", $rfidTag);
+$checkStmt->execute();
+$result = $checkStmt->get_result();
+
+if ($result->num_rows > 0) {
+    echo json_encode(['success' => false, 'message' => '⚠️ RFID is already registered.']);
+    exit;
+}
+
+// Insert new RFID data
+$stmt = $conn->prepare("INSERT INTO registered_rfid (rfid_tag, user_id) VALUES (?, ?)");
+$stmt->bind_param("si", $rfidTag, $userId);
+
+if ($stmt->execute()) {
+    echo json_encode(['success' => true, 'message' => '✅ RFID registered successfully.']);
+} else {
+    echo json_encode(['success' => false, 'message' => '❗ Failed to register RFID. Try again.']);
+}
+
+$stmt->close();
+$conn->close();
 ?>
