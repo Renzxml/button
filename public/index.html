@@ -5,8 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>RFID Scanner</title>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
-    <script src="../script.js" defer></script>
-    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- <script src="https://cdn.tailwindcss.com"></script> -->
 </head>
 <style>
     #overlay {
@@ -31,92 +30,105 @@
 
         const scanBtn = document.getElementById('scanBtn');
         const rfidData = document.getElementById('rfidData');
-
-        // Dark overlay and countdown elements
-        const overlay = document.createElement('div');
-        overlay.id = 'overlay';
-        overlay.classList = 'fixed inset-0 bg-black bg-opacity-80 flex items-center justify-center text-white text-3xl hidden';
-        document.body.appendChild(overlay);
+        const overlay = document.getElementById('overlay');
+        const countdownDisplay = document.getElementById('countdown');
 
         let countdownTimer;
         let scannedTag = '';
 
-        // Function to display countdown overlay
+        // Display Countdown Overlay
         function startCountdown(duration = 30) {
             overlay.classList.remove('hidden');
-            overlay.textContent = `Scanning... ${duration}s`;
+            countdownDisplay.textContent = `Scanning... ${duration}s`;
 
             countdownTimer = setInterval(() => {
                 duration--;
-                overlay.textContent = `Scanning... ${duration}s`;
+                countdownDisplay.textContent = `Scanning... ${duration}s`;
 
                 if (duration <= 0) {
                     clearInterval(countdownTimer);
                     overlay.classList.add('hidden');
-                    alert('❗ Time expired. Please try again.');
+                    Swal.fire('❗ Time Expired', 'Please try again.', 'warning');
                 }
             }, 1000);
         }
 
         // Start RFID Scanning
         scanBtn.addEventListener('click', () => {
-            socket.send('START_SCANNING');
-            startCountdown(30);  // Start countdown when scan button is clicked
+            if (socket.readyState === WebSocket.OPEN) {
+                socket.send('START_SCANNING');
+                startCountdown(30); 
+            } else {
+                Swal.fire('❌ Error', 'WebSocket connection failed. Please refresh the page.', 'error');
+            }
         });
 
-        // Receive Data from WebSocket
+        // WebSocket Message Handling
         socket.onmessage = async (event) => {
-            const data = JSON.parse(event.data);
+            try {
+                const data = JSON.parse(event.data);
 
-            if (data.type === 'RFID_TAG') {
-                scannedTag = data.tag;
-                rfidData.innerText = `Scanned RFID: ${scannedTag}`;
+                if (data.type === 'RFID_TAG') {
+                    scannedTag = data.tag;
+                    rfidData.innerText = `Scanned RFID: ${scannedTag}`;
 
-                // Stop countdown and hide overlay
-                clearInterval(countdownTimer);
-                overlay.classList.add('hidden');
+                    clearInterval(countdownTimer); // Stop countdown
+                    overlay.classList.add('hidden');
 
-                // Display SweetAlert for user selection
-                Swal.fire({
-                    title: 'New RFID Detected',
-                    html: `
-                        <p class="text-lg mb-2">Scanned RFID: <strong>${scannedTag}</strong></p>
-                        <label class="block mb-2">Assign RFID to:</label>
-                        <select id="userDropdown" class="swal2-select w-full">
-                            <option value="">-- Select User --</option>
-                            <option value="1">Juan Dela Cruz</option>
-                            <option value="2">Maria Santos</option>
-                            <option value="3">Pedro Gomez</option>
-                        </select>
-                    `,
-                    showCancelButton: true,
-                    confirmButtonText: '✅ Save RFID',
-                    cancelButtonText: '❌ Reject RFID',
-                    preConfirm: async () => {
-                        const selectedUserId = document.getElementById('userDropdown').value;
-                        if (!selectedUserId) {
-                            Swal.showValidationMessage('❗ Please select a user.');
-                            return false;
+                    Swal.fire({
+                        title: 'New RFID Detected',
+                        html: `
+                            <p class="text-lg mb-2">Scanned RFID: <strong>${scannedTag}</strong></p>
+                            <label class="block mb-2">Assign RFID to:</label>
+                            <select id="userDropdown" class="swal2-select w-full">
+                                <option value="">-- Select User --</option>
+                                <option value="1">Juan Dela Cruz</option>
+                                <option value="2">Maria Santos</option>
+                                <option value="3">Pedro Gomez</option>
+                            </select>
+                        `,
+                        showCancelButton: true,
+                        confirmButtonText: '✅ Save RFID',
+                        cancelButtonText: '❌ Reject RFID',
+                        preConfirm: async () => {
+                            const selectedUserId = document.getElementById('userDropdown').value;
+                            if (!selectedUserId) {
+                                Swal.showValidationMessage('❗ Please select a user.');
+                                return false;
+                            }
+
+                            // Save RFID to Database
+                            try {
+                                const response = await fetch('register_rfid.php', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ rfidTag: scannedTag, userId: selectedUserId })
+                                });
+
+                                const result = await response.json();
+                                return result;
+                            } catch (error) {
+                                Swal.fire('❌ Error', 'Failed to register RFID. Try again.', 'error');
+                                return false;
+                            }
                         }
-
-                        // Save RFID to Database
-                        const response = await fetch('register_rfid.php', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ rfidTag: scannedTag, userId: selectedUserId })
-                        });
-
-                        const result = await response.json();
-                        return result;
-                    }
-                }).then((result) => {
-                    if (result.isConfirmed) {
-                        Swal.fire('✅ Success', result.value.message, 'success');
-                    } else {
-                        Swal.fire('❌ Rejected', 'RFID registration was cancelled.', 'error');
-                    }
-                });
+                    }).then((result) => {
+                        if (result.isConfirmed) {
+                            Swal.fire('✅ Success', result.value.message, 'success');
+                        } else {
+                            Swal.fire('❌ Rejected', 'RFID registration was cancelled.', 'error');
+                        }
+                    });
+                }
+            } catch (error) {
+                console.error('❗ Error processing message:', error);
+                Swal.fire('❌ Error', 'Failed to process server response.', 'error');
             }
+        };
+
+        // WebSocket Error Handling
+        socket.onerror = () => {
+            Swal.fire('❗ Connection Error', 'WebSocket connection failed.', 'error');
         };
     </script>
 </body>
