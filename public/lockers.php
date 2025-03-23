@@ -8,208 +8,188 @@ require 'db.php';
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Locker Management</title>
+    <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
-    <style>
-        body { font-family: Arial, sans-serif; background-color: #f4f4f4; padding: 20px; }
-        h1 { text-align: center; }
-        .locker-container { display: flex; flex-wrap: wrap; gap: 20px; justify-content: center; }
-        .locker-card {
-            background: #fff;
-            border: 2px solid #ddd;
-            border-radius: 8px;
-            padding: 15px;
-            width: 200px;
-            text-align: center;
-            box-shadow: 2px 2px 10px rgba(0, 0, 0, 0.1);
-        }
-        .status-available { color: green; }
-        .status-occupied { color: red; }
-        .locker-header { font-weight: bold; margin-bottom: 10px; }
-        #add-locker-btn {
-            display: block;
-            margin: 20px auto;
-            background-color: #4CAF50;
-            color: #fff;
-            border: none;
-            border-radius: 5px;
-            padding: 10px 20px;
-            cursor: pointer;
-        }
-        #add-locker-btn:hover {
-            background-color: #45a049;
-        }
-        .modal {
-            display: none;
-            position: fixed;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            background: #fff;
-            border: 2px solid #ddd;
-            border-radius: 10px;
-            padding: 20px;
-            box-shadow: 2px 2px 10px rgba(0, 0, 0, 0.2);
-            width: 300px;
-        }
-        .modal select {
-            width: 100%;
-            padding: 8px;
-            margin-top: 10px;
-        }
-        .modal button {
-            margin-top: 15px;
-            background-color: #4CAF50;
-            color: #fff;
-            border: none;
-            border-radius: 5px;
-            padding: 8px 15px;
-            cursor: pointer;
-        }
-        .modal button:hover {
-            background-color: #45a049;
-        }
-    </style>
 </head>
-<body>
-    <h1>Locker Management</h1>
+<body class="bg-gray-100 min-h-screen p-6">
 
-    <button id="add-locker-btn">➕ Add Locker</button>
+    <div class="max-w-4xl mx-auto bg-white p-8 rounded-lg shadow-lg">
+        <h1 class="text-3xl font-bold text-center text-green-600 mb-6">Locker Management</h1>
 
-    <div class="locker-container" id="locker-container">
-        <!-- Dynamic Locker Data will be loaded here -->
+        <button id="add-locker-btn"
+            class="block w-full bg-green-500 hover:bg-green-600 text-white py-2 px-4 rounded-md mb-6 transition">
+            ➕ Add Locker
+        </button>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4" id="locker-container">
+            <!-- Dynamic Locker Data will be loaded here -->
+        </div>
     </div>
 
-    <!-- Modal for User Selection -->
-    <div class="modal" id="user-selection-modal">
-        <h3>Select User</h3>
-        <select id="user-dropdown"></select>
-        <button id="confirm-user-btn">Confirm</button>
+    <!-- Modal for Adding Locker -->
+    <div class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center" id="add-locker-modal">
+        <div class="relative bg-white p-6 rounded-lg shadow-lg w-80">
+            <button id="close-add-locker-modal"
+                    class="absolute top-2 right-2 text-gray-500 hover:text-red-500">
+                ✖
+            </button>
+            <h3 class="text-xl font-bold mb-4 text-green-500">Add Locker</h3>
+
+            <label for="locker-number" class="block mb-1">Locker Number:</label>
+            <input type="text" id="locker-number"
+                   class="w-full border border-gray-300 rounded-md p-2 focus:outline-none focus:ring focus:ring-green-400">
+
+            <label for="pin-number-dropdown" class="block mt-4 mb-1">Select Pin Number:</label>
+            <select id="pin-number-dropdown"
+                    class="w-full border border-gray-300 rounded-md p-2 focus:outline-none focus:ring focus:ring-green-400">
+            </select>
+
+            <button id="confirm-add-locker"
+                    class="block w-full bg-green-500 hover:bg-green-600 text-white py-2 px-4 mt-4 rounded-md transition">
+                Add Locker
+            </button>
+        </div>
     </div>
 
 <script>
-    let selectedLockerId = null;
-    let selectedAction = null;
-
-    // Load lockers on page load
     $(document).ready(function() {
         loadLockers();
+        loadPins();
     });
 
     function loadLockers() {
         $.get("fetch_lockers.php", function(data) {
-            $('#locker-container').html(data); // Inject locker data
-        });
-    }
-    function loadUsers() {
-        const users = <?php
-            require 'db.php';
-            $query = "SELECT user_id, first_name, last_name FROM user_tbl WHERE role = 'user'";
-            $result = mysqli_query($conn, $query);
-
-            $users = [];
-            while ($row = mysqli_fetch_assoc($result)) {
-                $users[] = $row;
+            if (!data.trim()) {
+                $('#locker-container').html('<p class="text-center text-gray-500 w-full">❗ No lockers available.</p>');
+            } else {
+                $('#locker-container').html(data); 
             }
-
-            echo json_encode($users); // Directly output as JSON
-        ?>;
-
-        if (!users.length) {
-            alert("❗ No users found or failed to fetch data.");
-            return;
-        }
-
-        $('#user-dropdown').empty(); // Clear previous options
-        $('#user-dropdown').append('<option value="">Select User</option>'); // Placeholder option
-
-        users.forEach(user => {
-            $('#user-dropdown').append(
-                `<option value="${user.user_id}">${user.first_name} ${user.last_name}</option>`
-            );
         });
     }
 
-    
-    $(document).ready(function() {
-        loadUsers(); // Load users on page load
+    function loadPins() {
+    $.get("fetch_pins.php", function(data) {
+        console.log("Fetched Data:", data);  // <-- Add this for debugging
+
+        try {
+            const pins = JSON.parse(data);
+            $('#pin-number-dropdown').empty();
+
+            if (pins.length === 0) {
+                $('#pin-number-dropdown').append('<option value="">❗ No available pins</option>');
+            } else {
+                $('#pin-number-dropdown').append('<option value="">Select Pin Number</option>');
+                pins.forEach(pin => {
+                    $('#pin-number-dropdown').append(
+                        `<option value="${pin.pin_number}">${pin.pin_number}</option>`
+                    );
+                });
+            }
+        } catch (error) {
+            console.error("JSON Parse Error:", error);
+            console.error("Received Data:", data); // Show the data that failed to parse
+        }
     });
-    
-    // Open user modal for Assign/Change Status
-    function openUserModal(lockerId, actionType) {
-        selectedLockerId = lockerId;
-        selectedAction = actionType;
-        loadUsers();
-        $('#user-selection-modal').fadeIn();
-    }
+}
 
-    // Confirm user selection
-    $('#confirm-user-btn').on('click', function() {
-        const selectedUserId = $('#user-dropdown').val();
 
-        if (!selectedUserId) {
-            alert("Please select a user.");
+    // Add Locker Button Click
+    $('#add-locker-btn').on('click', function() {
+        $('#add-locker-modal').removeClass('hidden').addClass('flex');
+    });
+
+    // Close Modal
+    $('#close-add-locker-modal').on('click', function() {
+        $('#add-locker-modal').addClass('hidden').removeClass('flex');
+    });
+
+    // Confirm Add Locker
+    $('#confirm-add-locker').on('click', function() {
+        const lockerNumber = $('#locker-number').val();
+        const selectedPin = $('#pin-number-dropdown').val();
+
+        if (!lockerNumber || !selectedPin) {
+            alert("❗ Please enter a locker number and select a pin number.");
             return;
         }
 
         $.post("actions.php", { 
-            action: selectedAction, 
-            locker_id: selectedLockerId, 
-            user_id: selectedUserId 
+            action: "add", 
+            locker_number: lockerNumber,
+            pin_number: selectedPin
         }, function(response) {
             alert(response);
-            $('#user-selection-modal').fadeOut();
+            $('#add-locker-modal').addClass('hidden').removeClass('flex');
             loadLockers();
+            loadPins(); // Refresh available pin numbers
         });
     });
 
-    // Event delegation for dynamically added elements
-    $(document).on('click', '.assign-btn', function() {
+    // Delete Locker
+    $(document).on('click', '.delete-locker-btn', function() {
         const lockerId = $(this).data('locker-id');
-        openUserModal(lockerId, "assign");
-    });
 
-    $(document).on('click', '.change-status-btn', function() {
-        const lockerId = $(this).data('locker-id');
-        openUserModal(lockerId, "change_status");
-    });
-
-    $(document).on('click', '.clear-btn', function() {
-        const lockerId = $(this).data('locker-id');
-        if (confirm("Are you sure you want to clear this locker?")) {
-            $.post("actions.php", { action: "clear", locker_id: lockerId }, function(response) {
-                alert(response);
-                loadLockers();
-            });
-        }
-    });
-
-    $(document).on('click', '.delete-btn', function() {
-        const lockerId = $(this).data('locker-id');
         if (confirm("Are you sure you want to delete this locker?")) {
-            $.post("actions.php", { action: "delete", locker_id: lockerId }, function(response) {
+            $.post("actions.php", { 
+                action: "delete", 
+                locker_id: lockerId
+            }, function(response) {
                 alert(response);
-                loadLockers();
-            });
-        }
-    });
-
-    // Add Locker
-    $('#add-locker-btn').on('click', function() {
-        const lockerNumber = prompt("Enter Locker Number:");
-        if (lockerNumber) {
-            $.post("actions.php", { action: "add", locker_number: lockerNumber }, function(response) {
-                alert(response);
-                loadLockers();
+                loadLockers(); 
             });
         }
     });
 
     // Close modal when clicking outside
     $(window).on('click', function(event) {
-        if ($(event.target).is('#user-selection-modal')) {
-            $('#user-selection-modal').fadeOut();
+        if ($(event.target).is('#add-locker-modal')) {
+            $('#add-locker-modal').addClass('hidden').removeClass('flex');
         }
     });
+
+    $(document).on('click', '.assign-btn', function() {
+    const lockerId = $(this).data('locker-id');
+    $.post("actions.php", { action: "assign", locker_id: lockerId }, function(response) {
+        alert(response);
+        loadLockers();
+    });
+});
+
+$(document).on('click', '.change-user-btn', function() {
+    const lockerId = $(this).data('locker-id');
+    $.post("actions.php", { action: "change_user", locker_id: lockerId }, function(response) {
+        alert(response);
+        loadLockers();
+    });
+});
+
+$(document).on('click', '.clear-btn', function() {
+    const lockerId = $(this).data('locker-id');
+    $.post("actions.php", { action: "clear", locker_id: lockerId }, function(response) {
+        alert(response);
+        loadLockers();
+    });
+});
+
+$(document).on('click', '.update-status-btn', function() {
+    const lockerId = $(this).data('locker-id');
+    $.post("actions.php", { action: "update_status", locker_id: lockerId }, function(response) {
+        alert(response);
+        loadLockers();
+    });
+});
+
+$(document).on('click', '.delete-locker-btn', function() {
+    const lockerId = $(this).data('locker-id');
+    if (confirm("Are you sure you want to delete this locker?")) {
+        $.post("actions.php", { action: "delete", locker_id: lockerId }, function(response) {
+            alert(response);
+            loadLockers();
+        });
+    }
+});
+
+
 </script>
 
 </body>
