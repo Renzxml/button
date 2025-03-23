@@ -20,3 +20,5 @@ while ($row = mysqli_fetch_assoc($result)) {
 // Return JSON data
 echo json_encode($users);
 ?>
+
+
