@@ -27,6 +27,11 @@ wss.on('connection', (ws) => {
         const cleanMessage = message.toString().trim();
         console.log(`📩 Received: ${cleanMessage}`);
 
+        // Log ESP32 Connection
+        if (message === "ESP32_CONNECTED") {
+            console.log("✅ ESP32 Successfully Connected!");
+        }
+
         if (cleanMessage === "START_SCANNING") {
             console.log("📡 Sending SCANNING_ACTIVE to ESP32...");
             wss.clients.forEach(client => {

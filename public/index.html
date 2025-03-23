@@ -4,16 +4,15 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>RFID Scanner</title>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script src="../script.js" defer></script>
     <script src="https://cdn.tailwindcss.com"></script>
 </head>
 <style>
-
     #overlay {
-    z-index: 9999;
-    font-weight: bold;
-}
-
+        z-index: 9999;
+        font-weight: bold;
+    }
 </style>
 <body class="flex flex-col items-center justify-center h-screen bg-gray-100">
     <h1 class="text-2xl font-bold mb-4">RFID Scanner</h1>
@@ -27,106 +26,98 @@
         <h2 id="countdown" class="text-white text-5xl font-bold"></h2>
     </div>
 
-    <!-- User Selection for New RFID -->
-    <div id="userSelect" class="hidden mt-4">
-        <label class="block">Assign RFID to:</label>
-        <select id="userDropdown" class="border px-2 py-1">
-            <option value="">Loading...</option>
-        </select>
-        <button id="assignBtn" class="bg-green-500 text-white px-4 py-2 rounded mt-2">Assign</button>
-    </div>
-
     <script>
         const socket = new WebSocket('ws://localhost:8080');
 
-const scanBtn = document.getElementById('scanBtn');
-const rfidData = document.getElementById('rfidData');
-const userSelect = document.getElementById('userSelect');
-const userDropdown = document.getElementById('userDropdown');
-const assignBtn = document.getElementById('assignBtn');
+        const scanBtn = document.getElementById('scanBtn');
+        const rfidData = document.getElementById('rfidData');
 
-// Dark overlay and countdown elements
-const overlay = document.createElement('div');
-overlay.id = 'overlay';
-overlay.classList = 'fixed inset-0 bg-black bg-opacity-80 flex items-center justify-center text-white text-3xl hidden';
-document.body.appendChild(overlay);
+        // Dark overlay and countdown elements
+        const overlay = document.createElement('div');
+        overlay.id = 'overlay';
+        overlay.classList = 'fixed inset-0 bg-black bg-opacity-80 flex items-center justify-center text-white text-3xl hidden';
+        document.body.appendChild(overlay);
 
-let countdownTimer;
-let scannedTag = '';
+        let countdownTimer;
+        let scannedTag = '';
 
-// Function to display countdown overlay
-function startCountdown(duration = 30) {
-    overlay.classList.remove('hidden');
-    overlay.textContent = `Scanning... ${duration}s`;
+        // Function to display countdown overlay
+        function startCountdown(duration = 30) {
+            overlay.classList.remove('hidden');
+            overlay.textContent = `Scanning... ${duration}s`;
 
-    countdownTimer = setInterval(() => {
-        duration--;
-        overlay.textContent = `Scanning... ${duration}s`;
+            countdownTimer = setInterval(() => {
+                duration--;
+                overlay.textContent = `Scanning... ${duration}s`;
 
-        if (duration <= 0) {
-            clearInterval(countdownTimer);
-            overlay.classList.add('hidden');
-            alert('❗ Time expired. Please try again.');
+                if (duration <= 0) {
+                    clearInterval(countdownTimer);
+                    overlay.classList.add('hidden');
+                    alert('❗ Time expired. Please try again.');
+                }
+            }, 1000);
         }
-    }, 1000);
-}
 
-// Fetch Users
-async function loadUsers() {
-    const response = await fetch('/get-users');
-    const users = await response.json();
+        // Start RFID Scanning
+        scanBtn.addEventListener('click', () => {
+            socket.send('START_SCANNING');
+            startCountdown(30);  // Start countdown when scan button is clicked
+        });
 
-    userDropdown.innerHTML = users.map(user => 
-        `<option value="${user.user_id}">${user.first_name} ${user.last_name}</option>`
-    ).join('');
-}
+        // Receive Data from WebSocket
+        socket.onmessage = async (event) => {
+            const data = JSON.parse(event.data);
 
-// Start RFID Scanning
-scanBtn.addEventListener('click', () => {
-    socket.send('START_SCANNING');
-    startCountdown(30);  // Start countdown when scan button is clicked
-});
+            if (data.type === 'RFID_TAG') {
+                scannedTag = data.tag;
+                rfidData.innerText = `Scanned RFID: ${scannedTag}`;
 
-// Receive Data from WebSocket
-socket.onmessage = (event) => {
-    const data = JSON.parse(event.data);
+                // Stop countdown and hide overlay
+                clearInterval(countdownTimer);
+                overlay.classList.add('hidden');
 
-    if (data.type === 'RFID_TAG') {
-        scannedTag = data.tag;
-        rfidData.innerText = `Scanned RFID: ${scannedTag}`;
-        userSelect.classList.remove('hidden');
+                // Display SweetAlert for user selection
+                Swal.fire({
+                    title: 'New RFID Detected',
+                    html: `
+                        <p class="text-lg mb-2">Scanned RFID: <strong>${scannedTag}</strong></p>
+                        <label class="block mb-2">Assign RFID to:</label>
+                        <select id="userDropdown" class="swal2-select w-full">
+                            <option value="">-- Select User --</option>
+                            <option value="1">Juan Dela Cruz</option>
+                            <option value="2">Maria Santos</option>
+                            <option value="3">Pedro Gomez</option>
+                        </select>
+                    `,
+                    showCancelButton: true,
+                    confirmButtonText: '✅ Save RFID',
+                    cancelButtonText: '❌ Reject RFID',
+                    preConfirm: async () => {
+                        const selectedUserId = document.getElementById('userDropdown').value;
+                        if (!selectedUserId) {
+                            Swal.showValidationMessage('❗ Please select a user.');
+                            return false;
+                        }
 
-        // Stop countdown and hide overlay
-        clearInterval(countdownTimer);
-        overlay.classList.add('hidden');
+                        // Save RFID to Database
+                        const response = await fetch('register_rfid.php', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ rfidTag: scannedTag, userId: selectedUserId })
+                        });
 
-        loadUsers();  // Load users dynamically
-    }
-};
-
-// Assign RFID to User
-assignBtn.addEventListener('click', async () => {
-    const selectedUserId = userDropdown.value;
-
-    if (!scannedTag || !selectedUserId) {
-        alert('❗ Please select a user and scan an RFID.');
-        return;
-    }
-
-    const response = await fetch('/save-rfid', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ rfidTag: scannedTag, userId: selectedUserId })
-    });
-
-    const result = await response.json();
-    alert(result.message);
-
-    // Reset values
-    rfidData.innerText = '';
-    userSelect.classList.add('hidden');
-});
-
+                        const result = await response.json();
+                        return result;
+                    }
+                }).then((result) => {
+                    if (result.isConfirmed) {
+                        Swal.fire('✅ Success', result.value.message, 'success');
+                    } else {
+                        Swal.fire('❌ Rejected', 'RFID registration was cancelled.', 'error');
+                    }
+                });
+            }
+        };
     </script>
 </body>
 </html>

@@ -41,6 +41,7 @@ void webSocketEvent(WStype_t type, uint8_t *payload, size_t length) {
     switch (type) {
         case WStype_CONNECTED:
             Serial.println("✅ WebSocket Connected!");
+            webSocket.sendTXT("ESP32_CONNECTED"); // Confirmation message
             lcd.clear();
             lcd.print("WS Connected!");
             break;
@@ -48,18 +49,14 @@ void webSocketEvent(WStype_t type, uint8_t *payload, size_t length) {
         case WStype_TEXT: {
             String command = String((char*)payload);
             command.trim();
+
             if (command.equalsIgnoreCase("START_SCANNING")) {
-                startRFIDScan();
-                webSocket.sendTXT("SCANNING_ACTIVE");
-            } else if (command.equalsIgnoreCase("SCANNING_ACTIVE")) {
-                Serial.println("Start Scanning");
-                lcd.clear();
-                lcd.print("Scan Mode Active");
+                Serial.println("✅ RFID Scanning Activated!");
                 startRFIDScan();
             } else {
                 lcd.clear();
                 lcd.print("Unknown Cmd:");
-                lcd.setCursor(0,1);
+                lcd.setCursor(0, 1);
                 lcd.print(command);
             }
             break;
@@ -84,7 +81,6 @@ void webSocketEvent(WStype_t type, uint8_t *payload, size_t length) {
             break;
     }
 }
-
 
 // ============================
 // Start RFID Scanning Mode
@@ -143,7 +139,7 @@ void setup() {
     SPI.begin();
     rfid.PCD_Init();  // Correct MFRC522v2 Initialization
 
-    webSocket.begin("192.168.110.164", 8080, "/");
+    webSocket.begin("192.168.0.103", 8080, "/");
     webSocket.onEvent(webSocketEvent);
 
     delay(1000);
@@ -155,35 +151,52 @@ void setup() {
 void loop() {
     webSocket.loop();
 
-    if (scanning) {
-    if (millis() - scanStartTime > scanDuration) {
-        scanning = false;
-        digitalWrite(LED_INDICATOR, LOW);
-        lcd.clear();
-        lcd.print("Scan Timeout");
-        return;
-    }
+    // Check if WebSocket is disconnected and attempt to reconnect
+    static unsigned long lastReconnectAttempt = 0;
+    if (!webSocket.isConnected()) {
+        if (millis() - lastReconnectAttempt > 5000) { // Try every 5 seconds
+            lastReconnectAttempt = millis();
+            Serial.println("⚠️ WebSocket Disconnected! Reconnecting...");
+            
+            lcd.clear();
+            lcd.setCursor(0, 0);
+            lcd.print("WS Disconnected!");
+            lcd.setCursor(0, 1);
+            lcd.print("Reconnecting...");
 
-    if (rfid.PICC_IsNewCardPresent() && rfid.PICC_ReadCardSerial()) {
-        String tag = "";
-        for (byte i = 0; i < rfid.uid.size; i++) {
-            tag += String(rfid.uid.uidByte[i], HEX);
+            webSocket.begin("192.168.0.103", 8080, "/");
         }
-        tag.toUpperCase();
-
-        Serial.println("📤 Sending RFID: " + tag);
-        webSocket.sendTXT("RFID_TAG:" + tag);  // Prefix "RFID_TAG:" to identify RFID tags
-
-        lcd.clear();
-        lcd.print("Scanned:");
-        lcd.setCursor(0, 1);
-        lcd.print(tag);
-
-        scanning = false;
-        digitalWrite(LED_INDICATOR, LOW);
-        rfid.PICC_HaltA();
-        rfid.PCD_StopCrypto1();
     }
-}
 
+    // RFID Scanning Logic
+    if (scanning) {
+        if (millis() - scanStartTime > scanDuration) {
+            scanning = false;
+            digitalWrite(LED_INDICATOR, LOW);
+            lcd.clear();
+            lcd.print("Scan Timeout");
+            return;
+        }
+
+        if (rfid.PICC_IsNewCardPresent() && rfid.PICC_ReadCardSerial()) {
+            String tag = "";
+            for (byte i = 0; i < rfid.uid.size; i++) {
+                tag += String(rfid.uid.uidByte[i], HEX);
+            }
+            tag.toUpperCase();
+
+            Serial.println("📤 Sending RFID: " + tag);
+            webSocket.sendTXT("RFID_TAG:" + tag);  // Prefix "RFID_TAG:" to identify RFID tags
+
+            lcd.clear();
+            lcd.print("Scanned:");
+            lcd.setCursor(0, 1);
+            lcd.print(tag);
+
+            scanning = false;
+            digitalWrite(LED_INDICATOR, LOW);
+            rfid.PICC_HaltA();
+            rfid.PCD_StopCrypto1();
+        }
+    }
 }
