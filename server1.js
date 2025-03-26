@@ -49,7 +49,19 @@ wss.on('connection', (ws) => {
                     client.send(JSON.stringify({ type: 'RFID_TAG', tag: tag }));
                 }
             });
-        } else {
+        }else if (cleanMessage.startsWith("SCANNED_TAG:")) {
+            const tag = cleanMessage.replace("SCANNED_TAG:", "").trim();
+            console.log(`🟦 Scanned Tag Received: ${tag}`);
+            
+            wss.clients.forEach(client => {
+                if (client.readyState === WebSocket.OPEN) {
+                    client.send(JSON.stringify({ type: 'SCANNED_TAG', tag: tag }));
+                }
+            });
+
+        } 
+        
+        else {
             wss.clients.forEach(client => {
                 if (client.readyState === WebSocket.OPEN) {
                     client.send(cleanMessage);
@@ -60,6 +72,50 @@ wss.on('connection', (ws) => {
 
     ws.on('close', () => console.log('❌ Client Disconnected'));
 });
+
+const axios = require('axios'); // For sending data to ESP32
+
+// Route to Validate Users and Control LED
+app.get('/validate-users/:scanned_tag', async (req, res) => {
+    const scannedTag = req.params.scanned_tag;
+
+    try {
+        // Step 1: Check RFID tag in 'registered_rfid' table
+        const [rfidResult] = await db.query(
+            "SELECT user_id FROM registered_rfid WHERE rfid_tag = ?",
+            [scannedTag]
+        );
+
+        if (rfidResult.length === 0) {
+            return res.status(404).json({ success: false, message: 'RFID tag not found.' });
+        }
+
+        const userId = rfidResult[0].user_id;
+
+        // Step 2: Check 'lockers_pin_hw' for pin_number linked to the same user_id
+        const [pinResult] = await db.query(
+            "SELECT pin_number FROM lockers_pin_hw WHERE user_id = ?",
+            [userId]
+        );
+
+        if (pinResult.length === 0) {
+            return res.status(404).json({ success: false, message: 'No pin assigned to this user.' });
+        }
+
+        const pinNumber = pinResult[0].pin_number;
+
+        // Step 3: Send the pinNumber to ESP32
+        await axios.post('http://<ESP32_IP_ADDRESS>/control-led', { pin: pinNumber });
+
+        res.json({ success: true, message: `LED with PIN ${pinNumber} activated.` });
+
+    } catch (error) {
+        console.error('❌ Error:', error);
+        res.status(500).json({ error: 'Failed to process request.' });
+    }
+});
+
+
 
 // Route to Fetch Users
 app.get('/get-users', async (req, res) => {

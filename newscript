@@ -59,7 +59,6 @@ void webSocketEvent(WStype_t type, uint8_t *payload, size_t length) {
 
             if (command.equalsIgnoreCase("START_SCANNING")) {
                 Serial.println("✅ RFID Scanning Activated!");
-                
                 startRFIDScan();
             } 
             else if (command.startsWith("PIN_NUMBER:")) {
@@ -190,7 +189,7 @@ void setup() {
     SPI.begin();
     rfid.PCD_Init();
 
-    webSocket.begin("192.168.102.164", 8080, "/");
+    webSocket.begin("192.168.0.103", 8080, "/");
     webSocket.onEvent(webSocketEvent);
 
     delay(1000);
