@@ -49,8 +49,6 @@ wss.on('connection', (ws) => {
                     client.send(JSON.stringify({ type: 'RFID_TAG', tag: tag }));
                 }
             });
-<<<<<<< HEAD
-=======
         } else if (cleanMessage.startsWith("SCANNED_TAG:")) {
             const tag = cleanMessage.replace("SCANNED_TAG:", "").trim();
             console.log(`🟦 Scanned Tag Received: ${tag}`);
@@ -60,7 +58,6 @@ wss.on('connection', (ws) => {
                     client.send(JSON.stringify({ type: 'SCANNED_TAG', tag: tag }));
                 }
             });
->>>>>>> 9473a0c396d9839bdc9b910150aa547bfaf6aee8
         } else {
             wss.clients.forEach(client => {
                 if (client.readyState === WebSocket.OPEN) {
@@ -73,8 +70,6 @@ wss.on('connection', (ws) => {
     ws.on('close', () => console.log('❌ Client Disconnected'));
 });
 
-<<<<<<< HEAD
-=======
 // Route to Validate Users and Control LED
 app.get('/validate-users/:scanned_tag', async (req, res) => {
     const scannedTag = req.params.scanned_tag;
@@ -115,7 +110,6 @@ app.get('/validate-users/:scanned_tag', async (req, res) => {
     }
 });
 
->>>>>>> 9473a0c396d9839bdc9b910150aa547bfaf6aee8
 // Route to Fetch Users
 app.get('/get-users', async (req, res) => {
     try {
