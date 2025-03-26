@@ -1,0 +1,149 @@
+#include <WiFi.h>
+#include <HTTPClient.h>
+#include <SPI.h>
+#include <MFRC522v2.h>
+#include <MFRC522DriverSPI.h>
+#include <MFRC522DriverPinSimple.h>
+#include <Wire.h>
+#include <LiquidCrystal_I2C.h>
+
+// WiFi Credentials
+const char* ssid = "HONORniRenz";
+const char* password = "pogiRinz";
+
+// Pusher Webhook URL
+const char* pusherURL = "http://yourserver.com/pusher-event.php";
+
+// RFID Module Pins
+#define SS_PIN 5
+#define RST_PIN 4
+MFRC522DriverPinSimple ss_pin(SS_PIN);
+MFRC522DriverSPI driver{ss_pin};
+MFRC522 rfid{driver};
+
+// LCD I2C (16x2)
+LiquidCrystal_I2C lcd(0x27, 16, 2);
+
+// GPIO Pins
+#define BUTTON_PIN 16
+#define LED_INDICATOR 17
+#define LED1 26
+#define LED2 25
+#define LED3 27
+
+bool scanningReg = false;
+bool scanning = false;
+unsigned long scanStartTime = 0;
+const unsigned long scanDuration = 30000;
+
+// ============================
+// Send Data to Pusher
+// ============================
+void sendToPusher(String event, String message) {
+    HTTPClient http;
+    http.begin(pusherURL);
+    http.addHeader("Content-Type", "application/json");
+    String payload = "{\"event\": \"" + event + "\", \"message\": \"" + message + "\"}";
+    int httpResponseCode = http.POST(payload);
+    http.end();
+}
+
+// ============================
+// Start RFID Scanning Mode
+// ============================
+void startRFIDScan() {
+    scanningReg = true;
+    scanStartTime = millis();
+    digitalWrite(LED_INDICATOR, HIGH);
+    lcd.clear();
+    lcd.print("REG MODE ACTIVE");
+}
+
+// ============================
+// LED Activation Based on Pin
+// ============================
+void handlePinActivation(int pinNumber) {
+    digitalWrite(LED1, LOW);
+    digitalWrite(LED2, LOW);
+    digitalWrite(LED3, LOW);
+    if (pinNumber == LED1 || pinNumber == LED2 || pinNumber == LED3) {
+        digitalWrite(pinNumber, HIGH);
+        lcd.clear();
+        lcd.print("LED Activated:");
+        lcd.setCursor(0, 1);
+        lcd.print("Pin " + String(pinNumber));
+    }
+}
+
+// ============================
+// WiFi Connection Handling
+// ============================
+void connectToWiFi() {
+    WiFi.begin(ssid, password);
+    lcd.clear();
+    lcd.print("Connecting WiFi...");
+    while (WiFi.status() != WL_CONNECTED) {
+        delay(500);
+    }
+    lcd.clear();
+    lcd.print("WiFi Connected!");
+}
+
+// ============================
+// Setup Function
+// ============================
+void setup() {
+    Serial.begin(115200);
+    lcd.init();
+    lcd.backlight();
+    connectToWiFi();
+
+    pinMode(BUTTON_PIN, INPUT_PULLUP);
+    pinMode(LED_INDICATOR, OUTPUT);
+    pinMode(LED1, OUTPUT);
+    pinMode(LED2, OUTPUT);
+    pinMode(LED3, OUTPUT);
+    
+    digitalWrite(LED_INDICATOR, LOW);
+    SPI.begin();
+    rfid.PCD_Init();
+    
+    sendToPusher("ESP32_CONNECTED", "ESP32 is online");
+}
+
+void loop() {
+    if (scanningReg) {
+        if (millis() - scanStartTime > scanDuration) {
+            scanningReg = false;
+            digitalWrite(LED_INDICATOR, LOW);
+            lcd.clear();
+            lcd.print("Reg Timeout");
+        }
+        if (rfid.PICC_IsNewCardPresent() && rfid.PICC_ReadCardSerial()) {
+            String tag = "";
+            for (byte i = 0; i < rfid.uid.size; i++) {
+                tag += String(rfid.uid.uidByte[i], HEX);
+            }
+            tag.toUpperCase();
+            sendToPusher("RFID_TAG", tag);
+            lcd.clear();
+            lcd.print("Reg Successful!");
+            lcd.setCursor(0, 1);
+            lcd.print(tag);
+            scanningReg = false;
+            digitalWrite(LED_INDICATOR, LOW);
+        }
+        return;
+    }
+
+    if (rfid.PICC_IsNewCardPresent() && rfid.PICC_ReadCardSerial()) {
+        String tag = "";
+        for (byte i = 0; i < rfid.uid.size; i++) {
+            tag += String(rfid.uid.uidByte[i], HEX);
+        }
+        tag.toUpperCase();
+        sendToPusher("SCANNED_TAG", tag);
+        lcd.setCursor(0, 1);
+        lcd.print("Tag: " + tag);
+    }
+}
