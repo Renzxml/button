@@ -1,0 +1,114 @@
+#include <WiFi.h>
+#include <SPI.h>
+#include <MFRC522.h>
+#include <Wire.h>
+#include <LiquidCrystal_I2C.h>
+
+// WiFi Credentials
+const char* ssid = "HONORniRenz";
+const char* password = "pogiRinz";
+
+// RFID Module Pins
+#define SS_PIN 5
+#define RST_PIN 22
+MFRC522 rfid(SS_PIN, RST_PIN);
+
+// LCD I2C (16x2)
+#define LCD_SDA 21
+#define LCD_SCL 16
+LiquidCrystal_I2C lcd(0x27, 16, 2);
+
+// GPIO Pins
+#define LED_INDICATOR 17
+#define LED1 25
+#define LED2 26
+#define LED3 27
+
+bool scanning = false;
+unsigned long scanStartTime = 0;
+const unsigned long scanDuration = 30000;
+
+// ============================
+// WiFi Connection Handling
+// ============================
+void connectToWiFi() {
+    WiFi.begin(ssid, password);
+    lcd.clear();
+    lcd.print("Connecting WiFi...");
+    while (WiFi.status() != WL_CONNECTED) {
+        delay(500);
+    }
+    lcd.clear();
+    lcd.print("WiFi Connected!");
+}
+
+// ============================
+// Start RFID Scanning Mode
+// ============================
+void startRFIDScan() {
+    scanning = true;
+    scanStartTime = millis();
+    digitalWrite(LED_INDICATOR, HIGH);
+    lcd.clear();
+    lcd.print("Scan Mode Active");
+}
+
+// ============================
+// LED Activation Based on Pin
+// ============================
+void handlePinActivation(int pinNumber) {
+    digitalWrite(LED1, LOW);
+    digitalWrite(LED2, LOW);
+    digitalWrite(LED3, LOW);
+    if (pinNumber == LED1 || pinNumber == LED2 || pinNumber == LED3) {
+        digitalWrite(pinNumber, HIGH);
+        lcd.clear();
+        lcd.print("LED Activated:");
+        lcd.setCursor(0, 1);
+        lcd.print("Pin " + String(pinNumber));
+    }
+}
+
+// ============================
+// Setup Function
+// ============================
+void setup() {
+    Serial.begin(115200);
+    lcd.init();
+    lcd.backlight();
+    connectToWiFi();
+
+    pinMode(LED_INDICATOR, OUTPUT);
+    pinMode(LED1, OUTPUT);
+    pinMode(LED2, OUTPUT);
+    pinMode(LED3, OUTPUT);
+    
+    digitalWrite(LED_INDICATOR, LOW);
+    SPI.begin();
+    rfid.PCD_Init();
+}
+
+void loop() {
+    if (scanning) {
+        if (millis() - scanStartTime > scanDuration) {
+            scanning = false;
+            digitalWrite(LED_INDICATOR, LOW);
+            lcd.clear();
+            lcd.print("Scan Timeout");
+        }
+        if (rfid.PICC_IsNewCardPresent() && rfid.PICC_ReadCardSerial()) {
+            String tag = "";
+            for (byte i = 0; i < rfid.uid.size; i++) {
+                tag += String(rfid.uid.uidByte[i], HEX);
+            }
+            tag.toUpperCase();
+            lcd.clear();
+            lcd.print("Scanned Tag:");
+            lcd.setCursor(0, 1);
+            lcd.print(tag);
+            scanning = false;
+            digitalWrite(LED_INDICATOR, LOW);
+        }
+        return;
+    }
+}

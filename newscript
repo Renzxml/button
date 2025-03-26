@@ -1,9 +1,7 @@
 #include <WiFi.h>
 #include <WebSocketsClient.h>
 #include <SPI.h>
-#include <MFRC522v2.h>
-#include <MFRC522DriverSPI.h>
-#include <MFRC522DriverPinSimple.h>
+#include <MFRC522.h>
 #include <Wire.h>
 #include <LiquidCrystal_I2C.h>
 
@@ -11,28 +9,22 @@
 const char* ssid = "HONORniRenz";
 const char* password = "pogiRinz";
 
-// WebSocket Client
-WebSocketsClient webSocket;
+// WebSocket Server IP & Port
+const char* websocketServer = "192.168.102.164";  // Replace with your server's IP
+const int websocketPort = 8080;
 
 // RFID Module Pins
 #define SS_PIN 5
-#define RST_PIN 4
-
-// MFRC522v2 Setup
-MFRC522DriverPinSimple ss_pin(SS_PIN);
-MFRC522DriverSPI driver{ss_pin};
-MFRC522 rfid{driver};
+#define RST_PIN 22
+MFRC522 rfid(SS_PIN, RST_PIN);
 
 // LCD I2C (16x2)
 LiquidCrystal_I2C lcd(0x27, 16, 2);
 
 // GPIO Pins
-#define BUTTON_PIN 16
 #define LED_INDICATOR 17
-
-// Locker LEDs (Example Pins — Change as needed)
-#define LED1 26
-#define LED2 25
+#define LED1 25
+#define LED2 26
 #define LED3 27
 
 
