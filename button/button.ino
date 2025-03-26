@@ -1,9 +1,7 @@
 #include <WiFi.h>
 #include <WebSocketsClient.h>
 #include <SPI.h>
-#include <MFRC522v2.h>
-#include <MFRC522DriverSPI.h>
-#include <MFRC522DriverPinSimple.h>
+#include <MFRC522.h>
 #include <Wire.h>
 #include <LiquidCrystal_I2C.h>
 
@@ -11,28 +9,30 @@
 const char* ssid = "HONORniRenz";
 const char* password = "pogiRinz";
 
-// WebSocket Client
-WebSocketsClient webSocket;
+// WebSocket Server IP & Port
+const char* websocketServer = "192.168.102.164";  // Ensure this is the correct IP
+const int websocketPort = 8080;
 
 // RFID Module Pins
 #define SS_PIN 5
-#define RST_PIN 4
-
-// MFRC522v2 Setup
-MFRC522DriverPinSimple ss_pin(SS_PIN);
-MFRC522DriverSPI driver{ss_pin};
-MFRC522 rfid{driver};
+#define RST_PIN 22
+MFRC522 rfid(SS_PIN, RST_PIN);
 
 // LCD I2C (16x2)
 LiquidCrystal_I2C lcd(0x27, 16, 2);
 
 // GPIO Pins
-#define BUTTON_PIN 16
 #define LED_INDICATOR 17
+#define LED1 25
+#define LED2 26
+#define LED3 27
 
-bool scanning = false;
+bool scanningReg = false;
+bool scanning = true;
 unsigned long scanStartTime = 0;
 const unsigned long scanDuration = 30000; // 30 seconds
+
+WebSocketsClient webSocket;
 
 // ============================
 // WebSocket Event Handling
@@ -41,7 +41,7 @@ void webSocketEvent(WStype_t type, uint8_t *payload, size_t length) {
     switch (type) {
         case WStype_CONNECTED:
             Serial.println("✅ WebSocket Connected!");
-            webSocket.sendTXT("ESP32_CONNECTED"); // Confirmation message
+            webSocket.sendTXT("ESP32_CONNECTED");
             lcd.clear();
             lcd.print("WS Connected!");
             break;
@@ -50,9 +50,17 @@ void webSocketEvent(WStype_t type, uint8_t *payload, size_t length) {
             String command = String((char*)payload);
             command.trim();
 
-            if (command.equalsIgnoreCase("START_SCANNING")) {
+            if (command.equalsIgnoreCase("SCANNING_ACTIVE")) {
                 Serial.println("✅ RFID Scanning Activated!");
                 startRFIDScan();
+            } 
+            else if (command.startsWith("PIN_NUMBER:")) {
+                int pinNumber = command.substring(11).toInt();
+                handlePinActivation(pinNumber);
+            } else if (command.startsWith("SCAN_TIMEOUT:")) {
+                scanningReg = false;
+                scanning = true;
+                return;
             } else {
                 lcd.clear();
                 lcd.print("Unknown Cmd:");
@@ -73,7 +81,6 @@ void webSocketEvent(WStype_t type, uint8_t *payload, size_t length) {
         default:
             Serial.print("❓ Unknown WebSocket Event: ");
             Serial.println(type);
-
             lcd.clear();
             lcd.print("Unknown Event:");
             lcd.setCursor(0, 1);
@@ -82,15 +89,41 @@ void webSocketEvent(WStype_t type, uint8_t *payload, size_t length) {
     }
 }
 
+
 // ============================
 // Start RFID Scanning Mode
 // ============================
 void startRFIDScan() {
-    scanning = true;
+    scanningReg = true;
+    scanning = false;
     scanStartTime = millis();
     digitalWrite(LED_INDICATOR, HIGH);
 
-    
+    lcd.clear();
+    lcd.print("REG MODE ACTIVE");
+    Serial.println("REG MODE ACTIVE");
+}
+
+// ============================
+// LED Activation Based on Pin
+// ============================
+void handlePinActivation(int pinNumber) {
+    digitalWrite(LED1, LOW);
+    digitalWrite(LED2, LOW);
+    digitalWrite(LED3, LOW);
+
+    if (pinNumber == LED1 || pinNumber == LED2 || pinNumber == LED3) {
+        digitalWrite(pinNumber, HIGH);
+        Serial.println("✅ LED " + String(pinNumber) + " Activated!");
+        lcd.clear();
+        lcd.print("LED Activated:");
+        lcd.setCursor(0, 1);
+        lcd.print("Pin " + String(pinNumber));
+    } else {
+        Serial.println("❌ Invalid Pin Received: " + String(pinNumber));
+        lcd.clear();
+        lcd.print("Invalid Pin!");
+    }
 }
 
 // ============================
@@ -131,53 +164,44 @@ void setup() {
 
     connectToWiFi();
 
-    pinMode(BUTTON_PIN, INPUT_PULLUP);
     pinMode(LED_INDICATOR, OUTPUT);
+    pinMode(LED1, OUTPUT);
+    pinMode(LED2, OUTPUT);
+    pinMode(LED3, OUTPUT);
+
     digitalWrite(LED_INDICATOR, LOW);
+    digitalWrite(LED1, LOW);
+    digitalWrite(LED2, LOW);
+    digitalWrite(LED3, LOW);
 
     SPI.begin();
-    rfid.PCD_Init();  // Correct MFRC522v2 Initialization
+    rfid.PCD_Init();
 
-    webSocket.begin("192.168.110.164", 8080, "/");
+    webSocket.begin(websocketServer, websocketPort, "/");
     webSocket.onEvent(webSocketEvent);
 
     delay(1000);
 }
 
 // ============================
-// Main Loop
+// Main Loop Function
 // ============================
 void loop() {
-    webSocket.loop();
+    webSocket.loop(); // Ensure WebSocket keeps running
 
-    // Check if WebSocket is disconnected and attempt to reconnect
-    static unsigned long lastReconnectAttempt = 0;
-    if (!webSocket.isConnected()) {
-        if (millis() - lastReconnectAttempt > 5000) { // Try every 5 seconds
-            lastReconnectAttempt = millis();
-            Serial.println("⚠️ WebSocket Disconnected! Reconnecting...");
-            
-            lcd.clear();
-            lcd.setCursor(0, 0);
-            lcd.print("WS Disconnected!");
-            lcd.setCursor(0, 1);
-            lcd.print("Reconnecting...");
-
-            webSocket.begin("192.168.0.103", 8080, "/");
-        }
-    }
-
-    // RFID Scanning Logic
-    if (scanning) {
-
-        lcd.clear();
-        lcd.print("RFID Scanning...");
+    // ============================
+    // RFID Registration Mode Logic
+    // ============================
+    if (scanningReg) {
+        lcd.setCursor(0, 0);
+        lcd.print("Reg Mode Active!");
 
         if (millis() - scanStartTime > scanDuration) {
-            scanning = false;
+            scanningReg = false;
+            scanning = true;
             digitalWrite(LED_INDICATOR, LOW);
             lcd.clear();
-            lcd.print("Scan Timeout");
+            lcd.print("Reg Timeout");
             return;
         }
 
@@ -188,18 +212,45 @@ void loop() {
             }
             tag.toUpperCase();
 
-            Serial.println("📤 Sending RFID: " + tag);
-            webSocket.sendTXT("RFID_TAG:" + tag);  // Prefix "RFID_TAG:" to identify RFID tags
+            Serial.println("📤 Sending RFID (Reg Mode): " + tag);
+            webSocket.sendTXT("RFID_TAG:" + tag);
 
             lcd.clear();
-            lcd.print("Scanned:");
+            lcd.print("Reg Successful!");
             lcd.setCursor(0, 1);
             lcd.print(tag);
 
-            scanning = false;
+            scanningReg = false;
+            scanning = true;
             digitalWrite(LED_INDICATOR, LOW);
             rfid.PICC_HaltA();
             rfid.PCD_StopCrypto1();
         }
+
+        return; // Prevent normal scanning while in registration mode
+
+    }else {
+
+
+    if (rfid.PICC_IsNewCardPresent() && rfid.PICC_ReadCardSerial()) {
+        String tag = "";
+        for (byte i = 0; i < rfid.uid.size; i++) {
+            tag += String(rfid.uid.uidByte[i], HEX);
+        }
+        tag.toUpperCase();
+
+        Serial.println("📤 Sending RFID (Continuous Mode): " + tag);
+        webSocket.sendTXT("SCANNED_TAG:" + tag);
+
+        lcd.setCursor(0, 1);
+        lcd.print("Tag: " + tag);
+
+        rfid.PICC_HaltA();
+        rfid.PCD_StopCrypto1();
     }
+
+        return; // Prevent normal scanning while in registration mode
+    }
+
+
 }
