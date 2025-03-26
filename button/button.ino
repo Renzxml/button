@@ -1,9 +1,7 @@
 #include <WiFi.h>
 #include <WebSocketsClient.h>
 #include <SPI.h>
-#include <MFRC522v2.h>
-#include <MFRC522DriverSPI.h>
-#include <MFRC522DriverPinSimple.h>
+#include <MFRC522.h>
 #include <Wire.h>
 #include <LiquidCrystal_I2C.h>
 
@@ -11,35 +9,30 @@
 const char* ssid = "HONORniRenz";
 const char* password = "pogiRinz";
 
-// WebSocket Client
-WebSocketsClient webSocket;
+// WebSocket Server IP & Port
+const char* websocketServer = "192.168.102.164";  // Ensure this is the correct IP
+const int websocketPort = 8080;
 
 // RFID Module Pins
 #define SS_PIN 5
-#define RST_PIN 4
-
-// MFRC522v2 Setup
-MFRC522DriverPinSimple ss_pin(SS_PIN);
-MFRC522DriverSPI driver{ss_pin};
-MFRC522 rfid{driver};
+#define RST_PIN 22
+MFRC522 rfid(SS_PIN, RST_PIN);
 
 // LCD I2C (16x2)
 LiquidCrystal_I2C lcd(0x27, 16, 2);
 
 // GPIO Pins
-#define BUTTON_PIN 16
 #define LED_INDICATOR 17
-
-// Locker LEDs (Example Pins — Change as needed)
-#define LED1 26
-#define LED2 25
+#define LED1 25
+#define LED2 26
 #define LED3 27
-
 
 bool scanningReg = false;
 bool scanning = false;
 unsigned long scanStartTime = 0;
 const unsigned long scanDuration = 30000; // 30 seconds
+
+WebSocketsClient webSocket;
 
 // ============================
 // WebSocket Event Handling
@@ -59,12 +52,11 @@ void webSocketEvent(WStype_t type, uint8_t *payload, size_t length) {
 
             if (command.equalsIgnoreCase("START_SCANNING")) {
                 Serial.println("✅ RFID Scanning Activated!");
-                
                 startRFIDScan();
             } 
             else if (command.startsWith("PIN_NUMBER:")) {
-                String pinNumber = command.substring(11);
-                handlePinActivation(pinNumber.toInt());
+                int pinNumber = command.substring(11).toInt();
+                handlePinActivation(pinNumber);
             } 
             else {
                 lcd.clear();
@@ -107,34 +99,25 @@ void startRFIDScan() {
     lcd.print("REG MODE ACTIVE");
 }
 
-
-
 // ============================
 // LED Activation Based on Pin
 // ============================
 void handlePinActivation(int pinNumber) {
-    // Turn off all LEDs first
     digitalWrite(LED1, LOW);
     digitalWrite(LED2, LOW);
     digitalWrite(LED3, LOW);
 
-    switch (pinNumber) {
-        case LED1:
-        case LED2:
-        case LED3:
-            digitalWrite(pinNumber, HIGH);
-            Serial.println("✅ LED " + String(pinNumber) + " Activated!");
-            lcd.clear();
-            lcd.print("LED Activated:");
-            lcd.setCursor(0, 1);
-            lcd.print("Pin " + String(pinNumber));
-            break;
-
-        default:
-            Serial.println("❌ Invalid Pin Received: " + String(pinNumber));
-            lcd.clear();
-            lcd.print("Invalid Pin!");
-            break;
+    if (pinNumber == LED1 || pinNumber == LED2 || pinNumber == LED3) {
+        digitalWrite(pinNumber, HIGH);
+        Serial.println("✅ LED " + String(pinNumber) + " Activated!");
+        lcd.clear();
+        lcd.print("LED Activated:");
+        lcd.setCursor(0, 1);
+        lcd.print("Pin " + String(pinNumber));
+    } else {
+        Serial.println("❌ Invalid Pin Received: " + String(pinNumber));
+        lcd.clear();
+        lcd.print("Invalid Pin!");
     }
 }
 
@@ -176,7 +159,6 @@ void setup() {
 
     connectToWiFi();
 
-    pinMode(BUTTON_PIN, INPUT_PULLUP);
     pinMode(LED_INDICATOR, OUTPUT);
     pinMode(LED1, OUTPUT);
     pinMode(LED2, OUTPUT);
@@ -190,14 +172,17 @@ void setup() {
     SPI.begin();
     rfid.PCD_Init();
 
-    webSocket.begin("192.168.102.164", 8080, "/");
+    webSocket.begin(websocketServer, websocketPort, "/");
     webSocket.onEvent(webSocketEvent);
 
     delay(1000);
 }
 
+// ============================
+// Main Loop Function
+// ============================
 void loop() {
-    webSocket.loop();
+    webSocket.loop(); // Ensure WebSocket keeps running
 
     // ============================
     // RFID Registration Mode Logic

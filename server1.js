@@ -3,6 +3,7 @@ const WebSocket = require('ws');
 const express = require('express');
 const http = require('http');
 const bodyParser = require('body-parser');
+const axios = require('axios'); // For sending data to ESP32
 
 const app = express();
 const server = http.createServer(app);
@@ -39,8 +40,7 @@ wss.on('connection', (ws) => {
                     client.send("SCANNING_ACTIVE");
                 }
             });
-        }
-         else if (cleanMessage.startsWith("RFID_TAG:")) {
+        } else if (cleanMessage.startsWith("RFID_TAG:")) {
             const tag = cleanMessage.replace("RFID_TAG:", "").trim();
             console.log(`🟦 RFID Tag Received: ${tag}`);
 
@@ -49,7 +49,7 @@ wss.on('connection', (ws) => {
                     client.send(JSON.stringify({ type: 'RFID_TAG', tag: tag }));
                 }
             });
-        }else if (cleanMessage.startsWith("SCANNED_TAG:")) {
+        } else if (cleanMessage.startsWith("SCANNED_TAG:")) {
             const tag = cleanMessage.replace("SCANNED_TAG:", "").trim();
             console.log(`🟦 Scanned Tag Received: ${tag}`);
             
@@ -58,10 +58,7 @@ wss.on('connection', (ws) => {
                     client.send(JSON.stringify({ type: 'SCANNED_TAG', tag: tag }));
                 }
             });
-
-        } 
-        
-        else {
+        } else {
             wss.clients.forEach(client => {
                 if (client.readyState === WebSocket.OPEN) {
                     client.send(cleanMessage);
@@ -72,8 +69,6 @@ wss.on('connection', (ws) => {
 
     ws.on('close', () => console.log('❌ Client Disconnected'));
 });
-
-const axios = require('axios'); // For sending data to ESP32
 
 // Route to Validate Users and Control LED
 app.get('/validate-users/:scanned_tag', async (req, res) => {
@@ -114,8 +109,6 @@ app.get('/validate-users/:scanned_tag', async (req, res) => {
         res.status(500).json({ error: 'Failed to process request.' });
     }
 });
-
-
 
 // Route to Fetch Users
 app.get('/get-users', async (req, res) => {
